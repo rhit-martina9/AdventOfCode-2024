@@ -5,16 +5,6 @@ with open("day20.txt") as file:
         line = line.replace("\n","")
         input.append([*line])
 
-def make_shortcut(posX,posY):
-    if input[posX][posY] != "#":
-        return None
-    walls = sum(1 if input[dir[0]+posX][dir[1]+posY] == "#" else 0 for dir in dirs)
-    if walls != 2:
-        return None
-    grid = [[x for x in line] for line in input]
-    grid[posX][posY] = "."
-    return grid
-
 def reconstruct(cameFrom, current):
     path = []
     while current in cameFrom:
@@ -57,23 +47,61 @@ def find_space(value):
                 return (i,j)
     return -1
 
+def make_dist_path(path):
+    out = {}
+    for i in range(len(path)):
+        out[path[i]] = len(path)-i
+    return out
+
+def get_walls_in_range(center, steps):
+    spaces = set()
+    openSet = [center]
+    seen = set()
+    while openSet != []:
+        current = openSet.pop()
+        seen.add(current)
+        for dir in dirs:
+            neighbor = (dir[0] + current[0], dir[1] + current[1])
+            if neighbor in seen:
+                continue
+            if neighbor[0] < 0 or neighbor[0] >= len(input) or neighbor[1] < 0 or neighbor[1] >= len(input[0]):
+                continue
+            dist = abs(neighbor[0]-center[0]) + abs(neighbor[1]-center[1])
+            if dist > steps:
+                continue
+            if input[neighbor[0]][neighbor[1]] != "#" and dist > 1:
+                spaces.add(neighbor)
+            openSet.append(neighbor)
+    return spaces
+
 def part_one():
     start = find_space("S")
     end = find_space("E")
-    og_score = len(a_star(start,end,input))
-    short = []
-    for i in range(1,len(input)-1):
-        for j in range(1,len(input)-1):
-            new_grid = make_shortcut(i,j)
-            if new_grid == None:
-                continue
-            new_score = len(a_star(start,end,new_grid))
-            if new_score <= og_score - 100:
-                short.append((i,j))
-    return len(short)
+    path = a_star(start,end,input) + [end]
+    dist_path = make_dist_path(path)
+    total = 0
+    for step in path:
+        shortcuts = get_walls_in_range(step,2)
+        for cut in shortcuts:
+            saved_time = dist_path[step] - dist_path[cut] - 2
+            if saved_time >= 100:
+                total += 1
+    return total
 
 def part_two():
-    return "Unknown"
+    start = find_space("S")
+    end = find_space("E")
+    path = a_star(start,end,input) + [end]
+    dist_path = make_dist_path(path)
+    total = 0
+    for step in path:
+        shortcuts = get_walls_in_range(step,20)
+        for cut in shortcuts:
+            dist = abs(step[0]-cut[0]) + abs(step[1]-cut[1])
+            saved_time = dist_path[step] - dist_path[cut] - dist
+            if saved_time >= 100:
+                total += 1
+    return total
 
 print("Answer to part 1:", part_one())
 print("Answer to part 2:", part_two())
