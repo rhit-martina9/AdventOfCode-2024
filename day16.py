@@ -79,7 +79,7 @@ def part_one():
 def find_path(current, goal, visited, turns, moves):
     if current == goal:
         return [visited]
-    if turns < 0 or moves < 0 or current == goal or abs(goal[0]-current[0]) + abs(goal[1]-current[1]) > moves:
+    if turns < 0 or moves < 0 or current == goal:
         return []
     
     out = []
