@@ -1,5 +1,5 @@
 def make_file(num):
-    file_contents = """input = {}
+    file_contents = """input = []
 
 with open("day""" + num + """.txt") as file:
     for line in file:
