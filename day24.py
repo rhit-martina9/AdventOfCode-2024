@@ -1,5 +1,6 @@
 registers = {}
 processes = []
+import re
 
 with open("day24.txt") as file:
     seen_break = False
@@ -7,7 +8,10 @@ with open("day24.txt") as file:
         line = line.replace("\n","")
         if seen_break:
             segment = line.split(" ")
-            processes.append((segment[1],segment[0],segment[2],segment[4]))
+            if segment[0] < segment[2]:
+                processes.append((segment[1],segment[0],segment[2],segment[4]))
+            else:
+                processes.append((segment[1],segment[2],segment[0],segment[4]))
         elif line == "":
             seen_break = True
         else:
@@ -37,7 +41,7 @@ def get_long_wire_str(source, key):
         out += str(wire[cell])
     return out
 
-def run_processes(old_processes):
+def run_processes(registers,old_processes):
     values = {x:registers[x] for x in registers}
     procs = [x for x in old_processes]
     count = len(procs)
@@ -49,137 +53,112 @@ def run_processes(old_processes):
         else:
             procs.append(proc)
             count -= 1
-    return values, get_long_wire(values,"z")
+    return get_long_wire(values,"z")
 
 def part_one():
-    return run_processes(processes)
+    return run_processes(registers,processes)
+
+def get_z_strs():
+    zs = []
+    for i in range(sum(1 if v[0] == "z" else 0 for v in outputs.keys())):
+        if i < 10:
+            zs.append("z0" + str(i))
+        else:
+            zs.append("z" + str(i))
+    return zs
 
 outputs = {v[3]:v for v in processes}
-def find_origins(wire: str) -> set[str]:
-    if wire[0] in ["x", "y"]:
+outputs = dict(sorted(outputs.items()))
+def find_origins(wire: str, outputs, include_regs = True, seen=set()) -> set[str]:
+    if wire[0] in ["x", "y"] and not include_regs:
         return set()
     if wire not in outputs:
         return {wire}
+    if wire in seen:
+        return set()
     
     process = outputs[wire]
-    return find_origins(process[1]).union(find_origins(process[2])).union({wire})
+    return find_origins(process[1],outputs,include_regs, seen.union({wire})).union(find_origins(process[2],outputs,include_regs, seen.union({wire}))).union({wire})
 
-def get_wrong_pos(expected,result):
+def get_definition(z,outs=outputs,seen=set()):
+    if z not in outs:
+        return z
+    if z in seen:
+        return ''
+    line = outs[z]
+    left = get_definition(line[1],outs,seen.union([z]))
+    right = get_definition(line[2],outs,seen.union([z]))
+    if right < left:
+        return "(" + line[0] + " " + right + " " + left + ")"
+    return "(" + line[0] + " " + left + " " + right + ")"
+
+def shorten(s, replacements):
+    check = True
+    while check:
+        check = False
+        for exp in replacements:
+            if exp in s:
+                s = s.replace(exp,replacements[exp])
+                check = True
+    return s
+
+def find_swaps(wrongs):
     out = []
-    expected_bin = str(bin(expected))[2:]
-    result_bin = str(bin(result))[2:]
-    for i in range(len(expected_bin)):
-        if expected_bin[i] != result_bin[i]:
-            out.append(len(expected_bin)-1-i)
-    return sorted(out)
-
-def part_two_ends(values, eval_result):
-    # print(get_long_wire_str(registers,"x"))
-    # print(get_long_wire_str(registers,"y"))
-    expected_z = get_long_wire(registers,"x") + get_long_wire(registers,"y")
-    print("want:",str(bin(expected_z)[2:]))
-    print("have:",str(bin(eval_result)[2:]))
-    wrong_pos = get_wrong_pos(expected_z,eval_result)
-    print(wrong_pos)
-    
-    for val in wrong_pos:
-        if val < 10:
-            val = "z0" + str(val)
-        else:
-            val = "z" + str(val)
-        print(val, values[val], outputs[val])
-
-    print()
-    print('dkk', values['dkk'], outputs['dkk'])
-    print('pbd', values['pbd'], outputs['pbd'])
-    print()
-    print('cpv', values['cpv'], outputs['cpv'])
-    print('fwr', values['fwr'], outputs['fwr'])
-    return "Unknown"
-
-def get_pairs(count):
-    out = []
-    for i in range(count):
-        for j in range(i+1,count):
-            out.append([i,j])
-    return out
-
-def sets_are_disjoint(pairs: list[list]):
-    for i in range(len(pairs)):
-        for j in range(i+1,len(pairs)):
-            if not set(pairs[i]).isdisjoint(set(pairs[j])):
-                return False
-    return True
-
-def swap_brute_force(swaps, expected):
-    pairs = get_pairs(len(swaps))
-    pairs = [(swaps[i[0]],swaps[i[1]]) for i in pairs]
-    new_processes = [list(x) for x in processes]
-    for i in range(len(pairs)):
-        print(i)
-        new_processes[pairs[i][0]][3], new_processes[pairs[i][1]][3] = new_processes[pairs[i][1]][3], new_processes[pairs[i][0]][3]
-        for j in range(i+1,len(pairs)):
-            if pairs[i][0] == pairs[j][0]:
+    fixed = []
+    out_processes = {x:outputs[x] for x in outputs}
+    wrong_keys = list(wrongs.keys())
+    for i in range(len(wrongs)):
+        wi = wrong_keys[i]
+        if wi in fixed:
+            continue
+        done = False
+        for j in range(i+1,len(wrongs)):
+            if done:
+                break
+            wj = wrong_keys[j]
+            if wj in fixed:
                 continue
-            if not sets_are_disjoint([pairs[i],pairs[j]]):
-                continue
-            new_processes[pairs[j][0]][3], new_processes[pairs[j][1]][3] = new_processes[pairs[j][1]][3], new_processes[pairs[j][0]][3]
-            for k in range(j+1,len(pairs)):
-                if pairs[j][0] == pairs[k][0]:
-                    continue
-                if not sets_are_disjoint([pairs[i],pairs[j],pairs[k]]):
-                    continue
-                new_processes[pairs[k][0]][3], new_processes[pairs[k][1]][3] = new_processes[pairs[k][1]][3], new_processes[pairs[k][0]][3]
-                for l in range(k+1,len(pairs)):
-                    if pairs[k][0] == pairs[l][0]:
-                        continue
-                    if not sets_are_disjoint([pairs[i],pairs[j],pairs[k],pairs[l]]):
-                        continue
-                    new_processes[pairs[l][0]][3], new_processes[pairs[l][1]] = new_processes[pairs[l][1]][3], new_processes[pairs[l][0]]
-                    if expected == run_processes(new_processes):
-                        return ','.join(sorted([new_processes[pairs[i][0]][3], new_processes[pairs[i][1]][3], new_processes[pairs[j][0]][3], new_processes[pairs[j][1]][3], 
-                                    new_processes[pairs[k][0]][3], new_processes[pairs[k][1]][3], new_processes[pairs[l][0]][3], new_processes[pairs[l][1]][3]]))
-                    new_processes[pairs[l][0]][3], new_processes[pairs[l][1]][3] = new_processes[pairs[l][1]][3], new_processes[pairs[l][0]][3]
-                new_processes[pairs[k][0]][3], new_processes[pairs[k][1]][3] = new_processes[pairs[k][1]][3], new_processes[pairs[k][0]][3]
-            new_processes[pairs[j][0]][3], new_processes[pairs[j][1]][3] = new_processes[pairs[j][1]][3], new_processes[pairs[j][0]][3]
-        new_processes[pairs[i][0]][3], new_processes[pairs[i][1]][3] = new_processes[pairs[i][1]][3], new_processes[pairs[i][0]][3]
-    return -1
+            for val1 in wrongs[wi]:
+                if done:
+                    break
+                for val2 in wrongs[wj]:
+                    out_processes[val1], out_processes[val2] = out_processes[val2], out_processes[val1]
+                    new_wrongs = get_wrongs(out_processes)
+                    if wi not in new_wrongs and wj not in new_wrongs:
+                        out.append(val1)
+                        out.append(val2)
+                        fixed.append(wj)
+                        done = True
+                        break
+                    out_processes[val1], out_processes[val2] = out_processes[val2], out_processes[val1]
+    if len(out) < len(wrong_keys):
+        return "Adder with 2 wrongs"
+    return ','.join(sorted(out))
 
-def part_two_brute_force():
-    expected_z = get_long_wire(registers,"x") & get_long_wire(registers,"y")
-    return swap_brute_force(processes,expected_z)
+def get_wrongs(outputs):
+    exps = {}
+    possible_wrongs = {}
+    adder_pattern = ["\(XOR \(OR \(AND \w+ \w+\) \(AND x"," y","\)\) \(XOR x"," y","\)\)"]
+    for z in range(len(zs)):
+        pattern = adder_pattern[0] + zs[z-1][1:] + adder_pattern[1] + zs[z-1][1:] + adder_pattern[2] + zs[z][1:] + adder_pattern[3] + zs[z][1:] + adder_pattern[4]
+        s = "" if z < 1 else shorten(get_definition(zs[z],outputs),exps[z-1])
+        if z > 1 and z < len(zs)-1 and re.match(pattern, s) == None:
+            possible_wrongs[z] = sorted(find_origins(zs[z],outputs,False).difference(find_origins(zs[z-1],outputs),find_origins(zs[z-2],outputs)),reverse=True)
 
-def part_two(values, eval_result):
-    # print(get_long_wire_str(registers,"x"))
-    # print(get_long_wire_str(registers,"y"))
-    expected_z = get_long_wire(registers,"x") + get_long_wire(registers,"y")
-    print("want:",str(bin(expected_z)[2:]))
-    print("have:",str(bin(eval_result)[2:]))
-    wrong_pos = get_wrong_pos(expected_z,eval_result)
-    print(wrong_pos)
-    outputs = {v[3]:v for v in processes}
-    outputs = dict(sorted(outputs.items()))
+        exps[z] = {}
+        if z > 0:
+            exps[z].update(exps[z-1])
+        for a in find_origins(zs[z],outputs,False):
+            if a not in exps:
+                exp = outputs[a]
+                exps[z]["(" + exp[0] + " " + exp[1] + " " + exp[2] + ")"] = a
+                exps[z]["(" + exp[0] + " " + exp[2] + " " + exp[1] + ")"] = a
+    return possible_wrongs
 
-    possible_wrong = set()
-    correct = set()
-    for pos in range(len(str(bin(expected_z)))-2):
-        if pos < 10:
-            str_pos = "z0" + str(pos)
-        else:
-            str_pos = "z" + str(pos)
-        # print(str_pos)
-        # print(find_origins(str_pos),"\n")
-        if pos in wrong_pos:
-            possible_wrong = possible_wrong.union(find_origins(str_pos).difference(correct,set([str_pos])))
-        else:
-            correct = correct.union(find_origins(str_pos))
-    for c in correct:
-        possible_wrong = possible_wrong.difference(find_origins(c))
-    possible_wrong = list(map(lambda x:processes.index(outputs[x]), possible_wrong))
-    print(possible_wrong)
-    print([processes[x] for x in possible_wrong])
-    return swap_brute_force(possible_wrong,expected_z)
+zs = get_z_strs()
+def part_two():
+    possible_wrongs = get_wrongs(outputs)
+    return find_swaps(possible_wrongs)
 
-values, part_one_ans = part_one()
-print("Answer to part 1:", part_one_ans)
-print("Answer to part 2:", part_two(part_one_ans))
+print("Answer to part 1:", part_one())
+print("Answer to part 2:", part_two())
